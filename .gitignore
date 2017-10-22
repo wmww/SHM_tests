@@ -1,0 +1,7 @@
+
+*.o
+*.gch
+build
+*.sconsign.dblite
+nogit
+*__pycache__
