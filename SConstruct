@@ -8,6 +8,7 @@ source_file_path = '.'
 debug_symbols = True
 
 libs = [
+	'rt',
 ]
 
 pkg_config_libs = [
