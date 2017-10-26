@@ -10,10 +10,16 @@
 #include <string.h>
 #include <errno.h>
 
-ShmBuffer::ShmBuffer(std::string nameIn, int dataSizeIn):
-	name(nameIn),
-	dataSize(dataSizeIn)
+ShmBuffer::ShmBuffer(std::string nameIn):
+	name(nameIn)
+{}
+
+void ShmBuffer::open()
 {
+	if (dataSize == 0)
+	{
+		dataSize = 1;
+	}
 	fd = shm_open(name.c_str(), O_CREAT | O_RDWR, 0666);
 	if (fd < 0)
 	{
@@ -24,10 +30,17 @@ ShmBuffer::ShmBuffer(std::string nameIn, int dataSizeIn):
 	data = mmap(0, dataSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (data == MAP_FAILED)
 	{
-		std::cerr << "mapping SHM buffer '" << nameIn << "' failed: " << strerror(errno) << std::endl;
+		std::cerr << "mapping SHM buffer '" << name << "' failed: " << strerror(errno) << std::endl;
 		return;
 	}
 	isValid = true;
+}
+
+int ShmBuffer::claimChunk(int chunkSize)
+{
+	int offset = dataSize;
+	dataSize += chunkSize;
+	return offset;
 }
 
 ShmBuffer::~ShmBuffer()
@@ -48,10 +61,11 @@ ShmBuffer::~ShmBuffer()
 			std::cerr << "closing SHM fd for '" << name << "' failed: " << strerror(errno) << std::endl;
 		}
 		fd = -1;
-		if (shm_unlink(name.c_str()) < 0)
-		{
-			std::cerr << "unlinking SHM '" << name << "' failed: " << strerror(errno) << std::endl;
-		}
+		// does not seem to be neededx
+		// if (shm_unlink(name.c_str()) < 0)
+		// {
+		// 	std::cerr << "unlinking SHM '" << name << "' failed: " << strerror(errno) << std::endl;
+		// }
 	}
 }
 

@@ -5,9 +5,11 @@
 
 int main()
 {
+	std::cout << "creating buffer" << std::endl;
+	ShmBuffer buffer("/shm_test");
 	std::cout << "opening buffer" << std::endl;
-	ShmBuffer buffer("/shm_test", 1000);
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+	buffer.open();
+	std::this_thread::sleep_for(std::chrono::milliseconds(4000));
 	std::cout << "closing buffer" << std::endl;
 }
 
