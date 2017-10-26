@@ -9,6 +9,7 @@ debug_symbols = True
 
 libs = [
 	'rt',
+	'pthread',
 ]
 
 pkg_config_libs = [
