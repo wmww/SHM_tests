@@ -1,6 +1,7 @@
 #include <string>
 #include <iostream>
 #include <functional>
+#include <vector>
 #include <boost/interprocess/shared_memory_object.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
@@ -29,15 +30,14 @@ public:
 	// reserves a block of the given size that will be available at the returned offset once open is called
 	// this should not be called after open
 	// essentially all this does is increase the total size by the given size and returns the previous total size
-	int addBlock(int sizeIn)
+	void addBlock(int sizeIn, std::function<void(void *, bool)> callback)
 	{
 		if (isOpen)
 		{
 			throw std::runtime_error("ShmBuffer::addBlock() called after buffer was opened\n");
 		}
-		int offset = size;
 		size += sizeIn;
-		return offset;
+		blocks.push_back({sizeIn, callback});
 	}
 	
 	// opens the SHM buffer
@@ -48,6 +48,7 @@ public:
 			close();
 		}
 		name = nameIn;
+		bool created = false;
 		try
 		{
 			debug("trying to open SHM");
@@ -58,9 +59,18 @@ public:
 			debug("creating SHM because open failed");
 			shm = shared_memory_object(create_only, name.c_str(), read_write);
 			shm.truncate(size);
+			created = true;
 		}
 		region = mapped_region(shm, read_write);
 		isOpen = true;
+		int offset = 0;
+		void * ptr = region.get_address();
+		for (auto i: blocks)
+		{
+			i.callback((char *)ptr + offset, created);
+			offset += i.size;
+		}
+		blocks.clear();
 	}
 	
 	// must be called after opened, returns a pointer to the data
@@ -101,21 +111,117 @@ private:
 	
 	boost::interprocess::shared_memory_object shm;
 	boost::interprocess::mapped_region region;
+	
+	struct Block
+	{
+		int size;
+		std::function<void(void *, bool)> callback;
+	};
+	
+	std::vector<Block> blocks;
+};
+
+template <typename DataT, template<typename> typename BlockT>
+class BufferBlock
+{
+public:
+	
+	// must be called before the buffer is opened
+	void setupFrom(ShmBuffer * buffer)
+	{
+		if (isReady)
+		{
+			throw std::runtime_error("BufferBlock::setupFrom called more then once\n");
+		}
+		buffer->addBlock(sizeof(BlockT<DataT>),
+			[this](void * ptr, bool created)
+			{
+				if (created)
+				{
+					new (static_cast<BlockT<DataT> *>(ptr)) BlockT<DataT>;
+				}
+				block = (BlockT<DataT> *)ptr;
+			}
+		);
+		isReady = true;
+	}
+	
+	// write and read data to and from the buffer, returns true if successful and false if failed
+	bool writeData(DataT * data)
+	{
+		return readOrWriteData(data, true);
+	}
+	
+	bool readData(DataT * data)
+	{
+		return readOrWriteData(data, false);
+	}
+	
+	bool getIsReady() { return isReady; }
+	
+protected:
+	
+	bool readOrWriteData(DataT * data, bool write)
+	{
+		if (block == nullptr)
+		{
+			throw std::runtime_error("BufferBlock::readOrWriteData called before buffer opened\n");
+		}
+		return block->readOrWriteData(data, write);
+	}
+	
+	// if this object has been set up
+	bool isReady = false;
+	
+	BlockT<DataT> * block = nullptr;
 };
 
 // a block (part of a SHM buffer) that will simply fail if you try to read and write to it at the same time
 template <typename T>
-class SingleBufferBlock
+class SingleBuffer
 {
 public:
-	SingleBufferBlock () {}
+	boost::interprocess::interprocess_mutex mutex;
+	T data;
+	
+	bool readOrWriteData(T * dataIn, bool write)
+	{
+		boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex>
+			lock(mutex, boost::interprocess::try_to_lock);
+		if (lock)
+		{
+			if (write)
+			{
+				memcpy(&data, dataIn, sizeof(T));
+			}
+			else
+			{
+				memcpy(dataIn, &data, sizeof(T));
+			}
+			
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+};
+
+/*
+// a block (part of a SHM buffer) that will simply fail if you try to read and write to it at the same time
+template <typename T>
+class DoubleBufferBlock
+{
+public:
+	DoubleBufferBlock () {}
 	
 	// must be called before the buffer is opened
 	void setupFrom(ShmBuffer * bufferIn)
 	{
 		if (isReady)
 		{
-			throw std::runtime_error("SingleBufferBlock::setupFrom called more then once\n");
+			throw std::runtime_error("DoubleBufferBlock::setupFrom called more then once\n");
 		}
 		buffer = bufferIn;
 		offset = buffer->addBlock(sizeof(Block));
@@ -139,8 +245,13 @@ private:
 	
 	struct Block
 	{
-		boost::interprocess::interprocess_mutex mutex;
-		void * data;
+		struct Section
+		{
+			boost::interprocess::interprocess_mutex mutex;
+			T data;
+		};
+		
+		Section sections[2];
 	};
 	
 	bool readOrWriteData(T * data, bool write)
@@ -180,3 +291,4 @@ private:
 	// the offset of this block from the base pointer in the buffer
 	int offset = 0;
 };
+*/

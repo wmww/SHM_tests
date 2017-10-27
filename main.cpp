@@ -27,7 +27,7 @@ struct DoubleBuffer
 int main(int argc, char ** argv)
 {
 	ShmBuffer buffer;
-	SingleBufferBlock<char> block;
+	BufferBlock<char, SingleBuffer> block;
 	block.setupFrom(&buffer);
 	buffer.open(shmName);
 	
