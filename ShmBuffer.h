@@ -208,87 +208,44 @@ public:
 	}
 };
 
-/*
 // a block (part of a SHM buffer) that will simply fail if you try to read and write to it at the same time
 template <typename T>
-class DoubleBufferBlock
+class DoubleBuffer
 {
 public:
-	DoubleBufferBlock () {}
-	
-	// must be called before the buffer is opened
-	void setupFrom(ShmBuffer * bufferIn)
+	struct Buffer
 	{
-		if (isReady)
-		{
-			throw std::runtime_error("DoubleBufferBlock::setupFrom called more then once\n");
-		}
-		buffer = bufferIn;
-		offset = buffer->addBlock(sizeof(Block));
-		isReady = true;
-	}
-	
-	// write and read data to and from the buffer, returns true if successful and false if failed
-	bool writeData(T * data)
-	{
-		return readOrWriteData(data, true);
-	}
-	
-	bool readData(T * data)
-	{
-		return readOrWriteData(data, false);
-	}
-	
-	bool getIsReady() { return isReady; }
-	
-private:
-	
-	struct Block
-	{
-		struct Section
-		{
-			boost::interprocess::interprocess_mutex mutex;
-			T data;
-		};
-		
-		Section sections[2];
+		boost::interprocess::interprocess_mutex mutex;
+		T data;
 	};
 	
-	bool readOrWriteData(T * data, bool write)
+	Buffer buffers[2];
+	
+	bool readOrWriteData(T * dataIn, bool write)
 	{
-		if (!isReady || !buffer->getIsOpen())
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		int written = 0;
+		for (int i = 0; i<2; i++)
 		{
-			throw std::runtime_error("SingleBufferBlock::readOrWriteData called before everything is set up\n");
+			T * ptr = &buffers[i].data;
+			boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex>
+				lock(buffers[i].mutex, boost::interprocess::try_to_lock);
+			
+			if (lock)
+			{
+				if (write)
+				{
+					memcpy(ptr, dataIn, sizeof(T));
+					written++;
+				}
+				else
+				{
+					memcpy(dataIn, ptr, sizeof(T));
+					return true;
+				}
+			}
 		}
 		
-		Block * block = static_cast<Block *>(buffer->getData());
-		boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex>
-			lock(block->mutex, boost::interprocess::try_to_lock);
-		if (lock)
-		{
-			if (write)
-			{
-				memcpy(&block->data, data, sizeof(T));
-			}
-			else
-			{
-				memcpy(data, &block->data, sizeof(T));
-			}
-			
-			return true;
-		}
-		else
-		{
-			return false;
-		}
+		return written == 2;
 	}
-	
-	// if this object has been set up
-	bool isReady = false;
-	
-	ShmBuffer * buffer = nullptr;
-	
-	// the offset of this block from the base pointer in the buffer
-	int offset = 0;
 };
-*/
