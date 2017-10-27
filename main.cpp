@@ -1,13 +1,16 @@
+#include <chrono>
+#include <thread>
+#include "ShmBuffer.h"
+
 #include <boost/interprocess/shared_memory_object.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
 #include <iostream>
-#include <chrono>
-#include <thread>
 
-using namespace boost::interprocess;
 const std::string shmName = "MySharedMemory";
+/*
+using namespace boost::interprocess;
 
 template <typename T>
 struct DoubleBuffer
@@ -19,9 +22,35 @@ struct DoubleBuffer
 		T data;		
 	} data[2];
 };
+* */
 
 int main(int argc, char ** argv)
 {
+	ShmBuffer buffer;
+	SingleBufferBlock<char> block;
+	block.setupFrom(&buffer);
+	buffer.open(shmName);
+	
+	for (int i = 0; i < 20; i++)
+	{
+		if (argc > 1)
+		{
+			if (!block.writeData(&argv[1][0]))
+			{
+				std::cout << "write failed" << std::endl;
+			}
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		char c = '+';
+		if (!block.readData(&c))
+		{
+			std::cout << "read failed" << std::endl;
+		}
+		std::cout << c << std::endl;
+		
+	}
+	
+	/*
 	//Remove shared memory on construction and destruction
 	struct shm_remove
 	{
@@ -76,7 +105,7 @@ int main(int argc, char ** argv)
 		std::cout << "unlocking..." << std::endl;
 		data->data[0].mutex.unlock();
 	}
-	
+	*/
 	/*
 	std::cout << "creating buffer" << std::endl;
 	ShmBuffer buffer("/shm_test");
