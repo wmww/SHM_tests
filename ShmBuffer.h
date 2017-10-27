@@ -61,8 +61,16 @@ public:
 			shm.truncate(size);
 			created = true;
 		}
-		region = mapped_region(shm, read_write);
-		isOpen = true;
+		try
+		{
+			region = mapped_region(shm, read_write);
+			isOpen = true;
+		}
+		catch(interprocess_exception &ex)
+		{
+			std::cerr << ex.what() << std::endl;
+			return;
+		}
 		int offset = 0;
 		void * ptr = region.get_address();
 		for (auto i: blocks)
@@ -80,21 +88,35 @@ public:
 		{
 			throw std::runtime_error("ShmBuffer::getData() called before buffer was opened\n");
 		}
-		return region.get_address();
+		try
+		{
+			return region.get_address();
+		}
+		catch(interprocess_exception &ex)
+		{
+			std::cerr << ex.what() << std::endl;
+		}
 	}
 	
 	// closes the SHM buffer, called automatically by the destructor if not called explicitly before
 	void close()
 	{
-		debug("closing SHM");
-		if (!isOpen)
+		try
 		{
-			throw std::runtime_error("ShmBuffer::close() called but buffer was not open\n");
+			debug("closing SHM");
+			if (!isOpen)
+			{
+				throw std::runtime_error("ShmBuffer::close() called but buffer was not open\n");
+			}
+			region = mapped_region();
+			shm = shared_memory_object();
+			shared_memory_object::remove(name.c_str());
+			size = 0;
 		}
-		region = mapped_region();
-		shm = shared_memory_object();
-		shared_memory_object::remove(name.c_str());
-		size = 0;
+		catch(interprocess_exception &ex)
+		{
+			std::cerr << ex.what() << std::endl;
+		}
 		isOpen = false;
 	}
 	
@@ -149,12 +171,28 @@ public:
 	// write and read data to and from the buffer, returns true if successful and false if failed
 	bool writeData(DataT * data)
 	{
-		return readOrWriteData(data, true);
+		try
+		{
+			return readOrWriteData(data, true);
+		}
+		catch(interprocess_exception &ex)
+		{
+			std::cerr << ex.what() << std::endl;
+			return false;
+		}
 	}
 	
 	bool readData(DataT * data)
 	{
-		return readOrWriteData(data, false);
+		try
+		{
+			return readOrWriteData(data, false);
+		}
+		catch(interprocess_exception &ex)
+		{
+			std::cerr << ex.what() << std::endl;
+			return false;
+		}
 	}
 	
 	bool getIsReady() { return isReady; }
@@ -223,7 +261,6 @@ public:
 	
 	bool readOrWriteData(T * dataIn, bool write)
 	{
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		int written = 0;
 		for (int i = 0; i<2; i++)
 		{
