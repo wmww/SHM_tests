@@ -171,9 +171,14 @@ public:
 	// write and read data to and from the buffer, returns true if successful and false if failed
 	bool writeData(DataT * data)
 	{
+		if (block == nullptr)
+		{
+			throw std::runtime_error("BufferBlock::writeData called before buffer opened\n");
+		}
+		
 		try
 		{
-			return readOrWriteData(data, true);
+			return block->writeData(data);
 		}
 		catch(interprocess_exception &ex)
 		{
@@ -184,9 +189,14 @@ public:
 	
 	bool readData(DataT * data)
 	{
+		if (block == nullptr)
+		{
+			throw std::runtime_error("BufferBlock::readData called before buffer opened\n");
+		}
+		
 		try
 		{
-			return readOrWriteData(data, false);
+			return block->readData(data);
 		}
 		catch(interprocess_exception &ex)
 		{
@@ -199,15 +209,6 @@ public:
 	
 protected:
 	
-	bool readOrWriteData(DataT * data, bool write)
-	{
-		if (block == nullptr)
-		{
-			throw std::runtime_error("BufferBlock::readOrWriteData called before buffer opened\n");
-		}
-		return block->readOrWriteData(data, write);
-	}
-	
 	// if this object has been set up
 	bool isReady = false;
 	
@@ -219,25 +220,30 @@ template <typename T>
 class SingleBuffer
 {
 public:
-	boost::interprocess::interprocess_mutex mutex;
+	interprocess_mutex mutex;
 	T data;
 	
-	bool readOrWriteData(T * dataIn, bool write)
+	bool readData(T * dataIn)
 	{
-		boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex>
-			lock(mutex, boost::interprocess::try_to_lock);
+		scoped_lock<interprocess_mutex> lock(mutex, try_to_lock);
+		
 		if (lock)
 		{
-			if (write)
-			{
-				memcpy(&data, dataIn, sizeof(T));
-			}
-			else
-			{
-				memcpy(dataIn, &data, sizeof(T));
-			}
-			
-			return true;
+			memcpy(dataIn, &data, sizeof(T));
+		}
+		else
+		{
+			return false;
+		}
+	}
+	
+	bool writeData(T * dataIn)
+	{
+		scoped_lock<interprocess_mutex> lock(mutex, try_to_lock);
+		
+		if (lock)
+		{
+			memcpy(&data, dataIn, sizeof(T));
 		}
 		else
 		{
@@ -251,38 +257,45 @@ template <typename T>
 class DoubleBuffer
 {
 public:
+	static const int bufferCount = 2;
+	
 	struct Buffer
 	{
 		boost::interprocess::interprocess_mutex mutex;
 		T data;
 	};
 	
-	Buffer buffers[2];
+	Buffer buffers[bufferCount];
 	
-	bool readOrWriteData(T * dataIn, bool write)
+	bool readData(T * dataIn)
 	{
-		int written = 0;
-		for (int i = 0; i<2; i++)
+		// loop backwards so its in opposite direction of write
+		for (int i = bufferCount - 1; i >= 0; i--)
 		{
-			T * ptr = &buffers[i].data;
-			boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex>
-				lock(buffers[i].mutex, boost::interprocess::try_to_lock);
-			
+			scoped_lock<interprocess_mutex> lock(buffers[i].mutex, try_to_lock);
 			if (lock)
 			{
-				if (write)
-				{
-					memcpy(ptr, dataIn, sizeof(T));
-					written++;
-				}
-				else
-				{
-					memcpy(dataIn, ptr, sizeof(T));
-					return true;
-				}
+				memcpy(dataIn, &buffers[i].data, sizeof(T));
+				return true;
 			}
 		}
-		
-		return written == 2;
+		return false;
+	}
+	
+	bool writeData(T * dataIn)
+	{
+		for (int i = 0; i < bufferCount; i++)
+		{
+			scoped_lock<interprocess_mutex> lock(buffers[i].mutex, try_to_lock);
+			if (lock)
+			{
+				memcpy(&buffers[i].data, dataIn, sizeof(T));
+			}
+			else
+			{
+				return false;
+			}
+		}
+		return true;
 	}
 };
