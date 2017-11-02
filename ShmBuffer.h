@@ -2,28 +2,30 @@
 
 #include <string>
 #include <iostream>
-#include <functional>
 #include <vector>
 #include <boost/interprocess/shared_memory_object.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
 
+namespace shm_helper
+{
+
 #define debug_off(msg)
 #define debug_on(msg) std::cout << msg << std::endl
 
 // switch between debug_on and debug_off to toggle debugging
-#define debug debug_on
+#define debug debug_off
 
 using namespace boost::interprocess;
 
-class ShmBuffer
+class Buffer
 {
 public:
-	ShmBuffer()
+	Buffer()
 	{}
 	
-	~ShmBuffer()
+	~Buffer()
 	{
 		if (isOpen)
 			close();
@@ -146,12 +148,12 @@ private:
 };
 
 template <typename DataT, template<typename> typename BlockT>
-class BufferBlock
+class Block
 {
 public:
 	
 	// must be called before the buffer is opened
-	void setupFrom(ShmBuffer * buffer)
+	void setupFrom(Buffer * buffer)
 	{
 		if (isReady)
 		{
@@ -301,3 +303,5 @@ public:
 		return true;
 	}
 };
+
+}
