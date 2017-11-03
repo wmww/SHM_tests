@@ -19,6 +19,15 @@ namespace shm_helper
 
 using namespace boost::interprocess;
 
+std::string lastError;
+std::string errorLog;
+void logError(std::string msg)
+{
+	lastError = msg;
+	errorLog += msg + "\n\n";
+	std::cerr << msg << std::endl;
+}
+
 class Buffer
 {
 public:
@@ -38,7 +47,8 @@ public:
 	{
 		if (isOpen)
 		{
-			throw std::runtime_error("ShmBuffer::addBlock() called after buffer was opened\n");
+			logError("ShmBuffer::addBlock() called after buffer was opened\n");
+			return;
 		}
 		size += sizeIn;
 		blocks.push_back({sizeIn, callback});
@@ -103,7 +113,8 @@ public:
 	{
 		if (!isOpen)
 		{
-			throw std::runtime_error("ShmBuffer::getData() called before buffer was opened\n");
+			logError("ShmBuffer::getData() called before buffer was opened\n");
+			return nullptr;
 		}
 		try
 		{
@@ -112,6 +123,7 @@ public:
 		catch(interprocess_exception &ex)
 		{
 			std::cerr << ex.what() << std::endl;
+			return nullptr;
 		}
 	}
 	
@@ -167,7 +179,8 @@ public:
 		this->buffer = buffer;
 		if (isReady)
 		{
-			throw std::runtime_error("BufferBlock::setupFrom called more then once\n");
+			logError("BufferBlock::setupFrom called more then once\n");
+			return;
 		}
 		buffer->addBlock(sizeof(BlockT<DataT>),
 			[this](void * ptr, bool created)
@@ -187,7 +200,8 @@ public:
 	{
 		if (block == nullptr || !buffer->getIsOpen())
 		{
-			throw std::runtime_error("BufferBlock::writeData called before buffer opened\n");
+			logError("BufferBlock::writeData called before buffer opened\n");
+			return false;
 		}
 		
 		try
@@ -205,7 +219,8 @@ public:
 	{
 		if (block == nullptr || !buffer->getIsOpen())
 		{
-			throw std::runtime_error("BufferBlock::readData called before buffer opened\n");
+			logError("BufferBlock::readData called before buffer opened\n");
+			return false;
 		}
 		
 		try
