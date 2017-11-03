@@ -11,6 +11,14 @@ int main(int argc, char ** argv)
 	block.setupFrom(&buffer);
 	buffer.open(shmName);
 	
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	
+	buffer.close();
+	
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	
+	buffer.open(shmName);
+	
 	for (int i = 0; i < 20; i++)
 	{
 		if (argc > 1)
@@ -20,7 +28,7 @@ int main(int argc, char ** argv)
 				std::cout << "write failed" << std::endl;
 			}
 		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		char c = '+';
 		if (!block.readData(&c))
 		{

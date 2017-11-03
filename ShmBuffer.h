@@ -15,7 +15,7 @@ namespace shm_helper
 #define debug_on(msg) std::cout << msg << std::endl
 
 // switch between debug_on and debug_off to toggle debugging
-#define debug debug_off
+#define debug debug_on
 
 using namespace boost::interprocess;
 
@@ -45,25 +45,35 @@ public:
 	}
 	
 	// opens the SHM buffer
-	void open(std::string nameIn)
+	void open(std::string name)
 	{
+		debug("opening buffer");
 		if (isOpen)
 		{
+			debug("buffer already open, closing buffer");
 			close();
 		}
-		name = nameIn;
 		bool created = false;
 		try
 		{
 			debug("trying to open SHM");
 			shm = shared_memory_object(open_only, name.c_str(), read_write);
+			debug("SHM open succeeded");
 		}
 		catch (boost::interprocess::interprocess_exception ex)
 		{
-			debug("creating SHM because open failed");
-			shm = shared_memory_object(create_only, name.c_str(), read_write);
-			shm.truncate(size);
-			created = true;
+			try
+			{
+				debug("creating SHM because open failed");
+				shm = shared_memory_object(create_only, name.c_str(), read_write);
+				shm.truncate(size);
+				created = true;
+			}
+			catch (boost::interprocess::interprocess_exception ex)
+			{
+				debug("error creating SHM");
+				std::cerr << ex.what() << std::endl;
+			}
 		}
 		try
 		{
@@ -72,7 +82,9 @@ public:
 		}
 		catch(interprocess_exception &ex)
 		{
+			debug("issue with mapping region");
 			std::cerr << ex.what() << std::endl;
+			close();
 			return;
 		}
 		int offset = 0;
@@ -83,6 +95,7 @@ public:
 			offset += i.size;
 		}
 		blocks.clear();
+		debug("Buffer::open finished");
 	}
 	
 	// must be called after opened, returns a pointer to the data
@@ -108,17 +121,15 @@ public:
 		try
 		{
 			debug("closing SHM");
-			if (!isOpen)
-			{
-				throw std::runtime_error("ShmBuffer::close() called but buffer was not open\n");
-			}
 			region = mapped_region();
 			shm = shared_memory_object();
-			shared_memory_object::remove(name.c_str());
+			shared_memory_object::remove(shm.get_name());
 			size = 0;
+			blocks.clear();
 		}
 		catch(interprocess_exception &ex)
 		{
+			debug("issue closing SHM");
 			std::cerr << ex.what() << std::endl;
 		}
 		isOpen = false;
@@ -129,8 +140,6 @@ public:
 private:	
 	// if the buffer is open
 	bool isOpen = false;
-	
-	std::string name;
 	
 	// size of the entire buffer
 	int size = 0;
@@ -155,6 +164,7 @@ public:
 	// must be called before the buffer is opened
 	void setupFrom(Buffer * buffer)
 	{
+		this->buffer = buffer;
 		if (isReady)
 		{
 			throw std::runtime_error("BufferBlock::setupFrom called more then once\n");
@@ -175,7 +185,7 @@ public:
 	// write and read data to and from the buffer, returns true if successful and false if failed
 	bool writeData(DataT * data)
 	{
-		if (block == nullptr)
+		if (block == nullptr || !buffer->getIsOpen())
 		{
 			throw std::runtime_error("BufferBlock::writeData called before buffer opened\n");
 		}
@@ -193,7 +203,7 @@ public:
 	
 	bool readData(DataT * data)
 	{
-		if (block == nullptr)
+		if (block == nullptr || !buffer->getIsOpen())
 		{
 			throw std::runtime_error("BufferBlock::readData called before buffer opened\n");
 		}
@@ -217,6 +227,8 @@ protected:
 	bool isReady = false;
 	
 	BlockT<DataT> * block = nullptr;
+	
+	Buffer * buffer;
 };
 
 // a block (part of a SHM buffer) that will simply fail if you try to read and write to it at the same time
