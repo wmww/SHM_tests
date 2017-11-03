@@ -20,7 +20,7 @@ namespace shm_helper
 using namespace boost::interprocess;
 
 std::string lastError;
-std::string errorLog;
+std::string errorLog = "[SHM error log start]\n\n";
 void logError(std::string msg)
 {
 	lastError = msg;
