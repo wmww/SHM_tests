@@ -236,6 +236,13 @@ public:
 	
 	bool getIsReady() { return isReady; }
 	
+	void destroy()
+	{
+		isReady = false;
+		block = nullptr;
+		buffer = nullptr;
+	}
+	
 protected:
 	
 	// if this object has been set up
@@ -243,7 +250,7 @@ protected:
 	
 	BlockT<DataT> * block = nullptr;
 	
-	Buffer * buffer;
+	Buffer * buffer = nullptr;
 };
 
 // a block (part of a SHM buffer) that will simply fail if you try to read and write to it at the same time
